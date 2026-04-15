@@ -9,7 +9,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +36,6 @@ fun PetDetailScreen(
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    // Загружаем данные по ID
     LaunchedEffect(petId) {
         try {
             isLoading = true
@@ -117,7 +115,6 @@ fun PetDetailContent(pet: PetListing, context: android.content.Context) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Фото
         if (!pet.photoUrl.isNullOrBlank()) {
             val painter = rememberAsyncImagePainter(
                 model = pet.photoUrl,
@@ -133,7 +130,6 @@ fun PetDetailContent(pet: PetListing, context: android.content.Context) {
             )
         }
 
-        // Тип объявления
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -159,13 +155,21 @@ fun PetDetailContent(pet: PetListing, context: android.content.Context) {
 
         Divider()
 
-        // Характеристики
         if (!pet.color.isNullOrBlank() || !pet.gender.isNullOrBlank() || !pet.temperament.isNullOrBlank()) {
             Text("Характеристики:", style = MaterialTheme.typography.titleMedium)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 pet.color?.let { InfoRow("🎨 Окрас:", it) }
                 pet.gender?.let { InfoRow("⚥ Пол:", if (it == "male") "Мальчик" else "Девочка") }
                 pet.temperament?.let { InfoRow("😊 Характер:", it) }
+                pet.size?.let { sizeValue ->
+                    val sizeText = when(sizeValue) {
+                        "small" -> "Маленький"
+                        "medium" -> "Средний"
+                        "large" -> "Большой"
+                        else -> sizeValue
+                    }
+                    InfoRow("📏 Размер:", sizeText)
+                }
             }
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -175,13 +179,18 @@ fun PetDetailContent(pet: PetListing, context: android.content.Context) {
             Spacer(modifier = Modifier.height(8.dp))
         }
 
+        if (!pet.createdAt.isNullOrBlank()) {
+            val formattedDate = pet.createdAt.substringBefore("T").replace("-", ".")
+            InfoRow("📅 Дата создания:", formattedDate)
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
         if (!pet.description.isNullOrBlank()) {
             Text("Описание:", style = MaterialTheme.typography.titleMedium)
             Text(pet.description, style = MaterialTheme.typography.bodyMedium)
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        // КОНТАКТЫ
         if (!pet.contact.isNullOrBlank() || !pet.contactPhone.isNullOrBlank()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -219,7 +228,7 @@ fun PetDetailContent(pet: PetListing, context: android.content.Context) {
                         OutlinedButton(
                             onClick = {
                                 val intent = Intent(Intent.ACTION_VIEW).apply {
-                                    data = Uri.parse("https://wa.me/$contact")
+                                    data = Uri.parse("https://wa.me/${contact.replace("@", "")}")
                                 }
                                 context.startActivity(intent)
                             },
@@ -229,7 +238,8 @@ fun PetDetailContent(pet: PetListing, context: android.content.Context) {
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Chat, contentDescription = null)
+                                Text("✉️")
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text("Написать: $contact")
                             }
                         }

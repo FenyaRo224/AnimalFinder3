@@ -24,5 +24,8 @@ data class PetListing(
     val temperament: String? = null,
     val contact: String? = null,
     @SerialName("contact_phone")
-    val contactPhone: String? = null
+    val contactPhone: String? = null,
+    val size: String? = null,
+    @SerialName("created_at")
+    val createdAt: String? = null       
 )
