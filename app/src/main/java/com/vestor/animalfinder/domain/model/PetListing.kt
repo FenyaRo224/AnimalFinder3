@@ -27,5 +27,5 @@ data class PetListing(
     val contactPhone: String? = null,
     val size: String? = null,
     @SerialName("created_at")
-    val createdAt: String? = null       
+    val createdAt: String? = null
 )

@@ -9,6 +9,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.rememberAsyncImagePainter
 import com.vestor.animalfinder.domain.model.PetListing
 import io.github.jan.supabase.postgrest.from
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,10 +34,20 @@ fun PetDetailScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val app = context.applicationContext as AnimalFinderApplication
 
     var pet by remember { mutableStateOf<PetListing?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var isDeleting by remember { mutableStateOf(false) }
+
+    // Текущий пользователь
+    var currentUserId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        currentUserId = app.authManager.getUserId().firstOrNull()
+    }
 
     LaunchedEffect(petId) {
         try {
@@ -56,6 +69,9 @@ fun PetDetailScreen(
         }
     }
 
+    // Проверка, может ли пользователь удалить это объявление
+    val canDelete = pet?.userId != null && pet?.userId == currentUserId
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -63,6 +79,13 @@ fun PetDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                    }
+                },
+                actions = {
+                    if (canDelete && !isDeleting) {
+                        IconButton(onClick = { showDeleteDialog = true }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Удалить")
+                        }
                     }
                 }
             )
@@ -103,6 +126,44 @@ fun PetDetailScreen(
                 PetDetailContent(pet!!, context)
             }
         }
+    }
+
+    // Диалог подтверждения удаления
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Удалить объявление") },
+            text = { Text("Вы уверены, что хотите удалить объявление о ${pet?.petName}? Это действие нельзя отменить.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            isDeleting = true
+                            try {
+                                supabase.from("pet_listings").delete {
+                                    filter {
+                                        eq("id", petId)
+                                    }
+                                }
+                                onBack()
+                            } catch (e: Exception) {
+                                error = "Ошибка удаления: ${e.message}"
+                            } finally {
+                                isDeleting = false
+                                showDeleteDialog = false
+                            }
+                        }
+                    }
+                ) {
+                    Text("Удалить", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
     }
 }
 
@@ -155,7 +216,7 @@ fun PetDetailContent(pet: PetListing, context: android.content.Context) {
 
         Divider()
 
-        if (!pet.color.isNullOrBlank() || !pet.gender.isNullOrBlank() || !pet.temperament.isNullOrBlank()) {
+        if (!pet.color.isNullOrBlank() || !pet.gender.isNullOrBlank() || !pet.temperament.isNullOrBlank() || !pet.size.isNullOrBlank()) {
             Text("Характеристики:", style = MaterialTheme.typography.titleMedium)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 pet.color?.let { InfoRow("🎨 Окрас:", it) }
@@ -238,8 +299,7 @@ fun PetDetailContent(pet: PetListing, context: android.content.Context) {
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("✉️")
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(Icons.Default.Email, contentDescription = null)
                                 Text("Написать: $contact")
                             }
                         }

@@ -3,14 +3,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
     kotlin("kapt")
     id("org.jetbrains.kotlin.plugin.compose") version "2.0.21"
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.0.21"   // 👈 ДОБАВЬ ЭТУ СТРОКУ
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.0.21"
 }
 
 android {
     namespace = "com.vestor.animalfinder"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.vestor.animalfinder"
@@ -53,15 +51,20 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
 
-    // Supabase (только Postgrest и Storage, без Auth)
-    implementation("io.github.jan-tennert.supabase:postgrest-kt:2.5.0")
-    implementation("io.github.jan-tennert.supabase:storage-kt:2.5.0")
+    // Supabase
+    implementation(platform("io.github.jan-tennert.supabase:bom:3.1.1"))
+    implementation("io.github.jan-tennert.supabase:postgrest-kt")
+    implementation("io.github.jan-tennert.supabase:storage-kt")
+    implementation("io.github.jan-tennert.supabase:auth-kt")
 
     // Ktor HTTP client
-    implementation("io.ktor:ktor-client-android:2.3.12")
+    implementation("io.ktor:ktor-client-android:3.0.3")
+    implementation("io.ktor:ktor-client-content-negotiation:3.0.3")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.3")
 
-    // Coil для фото
+    // Coil
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     // Navigation

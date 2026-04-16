@@ -25,6 +25,7 @@ import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.storage.storage
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
@@ -63,6 +64,7 @@ fun AddPetScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val app = context.applicationContext as AnimalFinderApplication
 
     // Состояния формы
     var listingType by remember { mutableStateOf("lost") }
@@ -177,16 +179,14 @@ fun AddPetScreen(
                 value = petName,
                 onValueChange = { petName = it },
                 label = { Text("Кличка *") },
-                modifier = Modifier.fillMaxWidth(),
-                isError = petName.isBlank() && showErrorDialog
+                modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
                 value = species,
                 onValueChange = { species = it },
                 label = { Text("Вид (собака/кошка/другое) *") },
-                modifier = Modifier.fillMaxWidth(),
-                isError = species.isBlank() && showErrorDialog
+                modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
@@ -324,7 +324,6 @@ fun AddPetScreen(
             // Кнопка сохранения
             Button(
                 onClick = {
-                    // Проверка обязательных полей
                     when {
                         petName.isBlank() -> {
                             validationErrorText = "Пожалуйста, укажите кличку животного"
@@ -370,6 +369,9 @@ fun AddPetScreen(
 
                             val newPetId = UUID.randomUUID().toString()
 
+                            // Получаем ID текущего пользователя
+                            val currentUserId = app.authManager.getUserId().firstOrNull()
+
                             val newPet = NewPetListing(
                                 id = newPetId,
                                 listingType = listingType,
@@ -386,7 +388,7 @@ fun AddPetScreen(
                                 contactPhone = contactPhone.ifBlank { null },
                                 size = size.ifBlank { null },
                                 photoUrl = uploadedPhotoUrl,
-                                userId = null
+                                userId = currentUserId
                             )
 
                             supabase.from("pet_listings").insert(newPet)

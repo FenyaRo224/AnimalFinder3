@@ -8,18 +8,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -29,6 +30,8 @@ import coil.compose.rememberAsyncImagePainter
 import com.vestor.animalfinder.domain.model.PetListing
 import com.vestor.animalfinder.ui.theme.AnimalFinderTheme
 import io.github.jan.supabase.postgrest.from
+import kotlinx.coroutines.flow.firstOrNull
+
 
 class MainActivity : ComponentActivity() {
 
@@ -43,7 +46,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AnimalFinderNavHost(app)
+                    AnimalFinderApp(app)
                 }
             }
         }
@@ -51,14 +54,77 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun AnimalFinderNavHost(app: AnimalFinderApplication) {
+fun AnimalFinderApp(app: AnimalFinderApplication) {
     val navController = rememberNavController()
 
+    var isAuthenticated by remember { mutableStateOf<Boolean?>(null) }
+
+    LaunchedEffect(Unit) {
+        val userId = app.authManager.getUserId().firstOrNull()
+        isAuthenticated = userId != null
+    }
+
+    when (isAuthenticated) {
+        null -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+        true -> {
+            AnimalFinderNavHost(
+                app = app,
+                navController = navController,
+                onLogout = {
+                    isAuthenticated = false
+                }
+            )
+        }
+        false -> {
+            AuthNavHost(navController, onLoginSuccess = {
+                isAuthenticated = true
+            })
+        }
+    }
+}
+
+@Composable
+fun AuthNavHost(
+    navController: NavHostController,
+    onLoginSuccess: () -> Unit
+) {
     NavHost(
         navController = navController,
-        startDestination = "list"
+        startDestination = "login"
     ) {
-        composable("list") {
+        composable("login") {
+            LoginScreen(
+                onLoginSuccess = onLoginSuccess,
+                onNavigateToRegister = { navController.navigate("register") }
+            )
+        }
+        composable("register") {
+            RegisterScreen(
+                onRegisterSuccess = { navController.navigate("login") },
+                onNavigateToLogin = { navController.navigate("login") }
+            )
+        }
+    }
+}
+
+@Composable
+fun AnimalFinderNavHost(
+    app: AnimalFinderApplication,
+    navController: NavHostController,
+    onLogout: () -> Unit
+) {
+    NavHost(
+        navController = navController,
+        startDestination = "main"
+    ) {
+        composable("main") {
             PetListScreen(
                 supabase = app.supabase,
                 onPetClick = { pet ->
@@ -66,6 +132,9 @@ fun AnimalFinderNavHost(app: AnimalFinderApplication) {
                 },
                 onAddClick = {
                     navController.navigate("add")
+                },
+                onProfileClick = {
+                    navController.navigate("profile")
                 }
             )
         }
@@ -74,17 +143,29 @@ fun AnimalFinderNavHost(app: AnimalFinderApplication) {
             route = "detail/{petId}",
             arguments = listOf(navArgument("petId") { type = NavType.StringType })
         ) { backStackEntry ->
-            val petId = backStackEntry.arguments?.getString("petId") ?: return@composable
-            PetDetailScreen(
-                petId = petId,
-                supabase = app.supabase,
-                onBack = { navController.popBackStack() }
-            )
+            val petId = backStackEntry.arguments?.getString("petId")
+            if (petId != null) {
+                PetDetailScreen(
+                    petId = petId,
+                    supabase = app.supabase,
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
 
         composable("add") {
             AddPetScreen(
                 supabase = app.supabase,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("profile") {
+            ProfileScreen(
+                onLogout = {
+                    onLogout()
+                    navController.popBackStack()
+                },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -95,21 +176,20 @@ fun AnimalFinderNavHost(app: AnimalFinderApplication) {
 fun PetListScreen(
     supabase: io.github.jan.supabase.SupabaseClient,
     onPetClick: (PetListing) -> Unit,
-    onAddClick: () -> Unit
+    onAddClick: () -> Unit,
+    onProfileClick: () -> Unit
 ) {
     var allPetList by remember { mutableStateOf<List<PetListing>>(emptyList()) }
     var filteredPetList by remember { mutableStateOf<List<PetListing>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    // Состояния фильтров
     var searchQuery by remember { mutableStateOf("") }
     var showFilters by remember { mutableStateOf(false) }
-    var selectedType by remember { mutableStateOf<String?>(null) } // lost, found, или null
-    var selectedGender by remember { mutableStateOf<String?>(null) } // male, female, или null
-    var selectedSize by remember { mutableStateOf<String?>(null) } // small, medium, large, или null
+    var selectedType by remember { mutableStateOf<String?>(null) }
+    var selectedGender by remember { mutableStateOf<String?>(null) }
+    var selectedSize by remember { mutableStateOf<String?>(null) }
 
-    // Загрузка данных
     LaunchedEffect(Unit) {
         try {
             isLoading = true
@@ -128,11 +208,9 @@ fun PetListScreen(
         }
     }
 
-    // Фильтрация при изменении поиска или фильтров
     LaunchedEffect(searchQuery, selectedType, selectedGender, selectedSize, allPetList) {
         var filtered = allPetList
 
-        // Фильтр по поиску (кличка)
         if (searchQuery.isNotBlank()) {
             filtered = filtered.filter {
                 it.petName.contains(searchQuery, ignoreCase = true) ||
@@ -140,17 +218,14 @@ fun PetListScreen(
             }
         }
 
-        // Фильтр по типу (lost/found)
         selectedType?.let { type ->
             filtered = filtered.filter { it.listingType == type }
         }
 
-        // Фильтр по полу
         selectedGender?.let { gender ->
             filtered = filtered.filter { it.gender == gender }
         }
 
-        // Фильтр по размеру
         selectedSize?.let { size ->
             filtered = filtered.filter { it.size == size }
         }
@@ -163,7 +238,6 @@ fun PetListScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Верхняя панель с заголовком и кнопкой добавления
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -173,14 +247,23 @@ fun PetListScreen(
                 text = "Animal Finder",
                 style = MaterialTheme.typography.headlineMedium
             )
-            Button(onClick = onAddClick) {
-                Text("➕")
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                IconButton(onClick = onProfileClick) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = "Профиль"
+                    )
+                }
+                Button(onClick = onAddClick) {
+                    Text("➕")
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Строка поиска
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
@@ -199,7 +282,6 @@ fun PetListScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Кнопка фильтров и активные фильтры
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -212,7 +294,6 @@ fun PetListScreen(
                 leadingIcon = { Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(16.dp)) }
             )
 
-            // Счётчик результатов
             Text(
                 text = "Найдено: ${filteredPetList.size}",
                 style = MaterialTheme.typography.bodySmall,
@@ -220,7 +301,6 @@ fun PetListScreen(
             )
         }
 
-        // Панель фильтров (показывается только если showFilters = true)
         if (showFilters) {
             Card(
                 modifier = Modifier
@@ -231,7 +311,6 @@ fun PetListScreen(
                 )
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    // Тип объявления
                     Text("Тип объявления:", style = MaterialTheme.typography.labelMedium)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -251,7 +330,6 @@ fun PetListScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Пол
                     Text("Пол:", style = MaterialTheme.typography.labelMedium)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -271,7 +349,6 @@ fun PetListScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // Размер
                     Text("Размер:", style = MaterialTheme.typography.labelMedium)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -294,7 +371,6 @@ fun PetListScreen(
                         )
                     }
 
-                    // Кнопка сброса фильтров
                     TextButton(
                         onClick = {
                             selectedType = null
@@ -312,7 +388,6 @@ fun PetListScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Список объявлений
         when {
             isLoading -> {
                 Box(
